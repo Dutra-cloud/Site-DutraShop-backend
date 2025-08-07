@@ -78,7 +78,35 @@ app.post('/api/orders', async (req, res) => {
         client.release();
     }
 });
+// COLE ESTE BLOCO NO FINAL DAS SUAS ROTAS, ANTES DE INICIAR O SERVIDOR
 
+// ======================================================
+// --- ROTA NOVA: Buscar o Histórico de Pedidos de um Usuário ---
+// ======================================================
+app.get('/api/orders', async (req, res) => {
+    // Pegamos o ID do usuário que vem na URL (ex: /api/orders?userId=1)
+    const userId = req.query.userId;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'ID do usuário é obrigatório.' });
+    }
+
+    try {
+        // Comando SQL para buscar os dados principais dos pedidos de um usuário específico, ordenados do mais recente para o mais antigo
+        const sql = `
+            SELECT id, order_date, total_price 
+            FROM orders 
+            WHERE user_id = $1 
+            ORDER BY order_date DESC
+        `;
+        const result = await pool.query(sql, [userId]);
+        // Retorna as linhas encontradas como JSON
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erro ao buscar pedidos:", err);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
 // --- INICIAR O SERVIDOR ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
