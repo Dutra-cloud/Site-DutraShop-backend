@@ -1,3 +1,5 @@
+// ARQUIVO server.js (VERSÃO FINAL E COMPLETA)
+
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
@@ -7,14 +9,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Adiciona um logger para cada requisição que chega na API
+// Logger para cada requisição que chega na API
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] Recebida requisição: ${req.method} ${req.url}`);
     next();
 });
 
 // --- CONEXÃO COM O BANCO DE DADOS POSTGRESQL ---
-// (Declarado apenas uma vez)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
@@ -22,8 +23,7 @@ const pool = new Pool({
     }
 });
 
-// --- FUNÇÃO PARA CRIAR AS TABELAS SE NÃO EXISTIREM ---
-// (Declarada apenas uma vez)
+// --- FUNÇÃO PARA CRIAR AS TABELAS ---
 const createTables = async () => {
     const createProductsTable = `CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price REAL NOT NULL, image TEXT, rating REAL, reviewCount INTEGER, category TEXT, stock INTEGER)`;
     const createUsersTable = `CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password TEXT NOT NULL)`;
@@ -40,7 +40,6 @@ const createTables = async () => {
 };
 
 // --- ROTAS DA API ---
-
 app.get('/api/products', async (req, res) => { try { const result = await pool.query('SELECT * FROM products'); res.json(result.rows); } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno do servidor' }); } });
 app.get('/api/products/:id', async (req, res) => { try { const { id } = req.params; const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]); if (result.rows.length === 0) { return res.status(404).json({ error: 'Produto não encontrado' }); } res.json(result.rows[0]); } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno do servidor' }); } });
 app.post('/api/register', async (req, res) => { try { const { name, email, password } = req.body; const hashedPassword = await bcrypt.hash(password, 10); const newUser = await pool.query('INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email', [name, email, hashedPassword]); res.status(201).json(newUser.rows[0]); } catch (err) { if (err.code === '23505') { return res.status(409).json({ error: 'Este e-mail já está cadastrado.' }); } console.error("Erro detalhado no cadastro:", err); res.status(500).json({ error: 'Ocorreu um erro inesperado.' }); } });
