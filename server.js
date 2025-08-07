@@ -77,7 +77,35 @@ app.post('/api/register', async (req, res) => { try { const { name, email, passw
 app.post('/api/login', async (req, res) => { try { const { email, password } = req.body; const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]); const user = result.rows[0]; if (!user) { return res.status(404).json({ error: 'Usuário não encontrado.' }); } const isMatch = await bcrypt.compare(password, user.password); if (!isMatch) { return res.status(401).json({ error: 'Senha incorreta.' }); } res.json({ success: 'Login bem-sucedido!', user: { id: user.id, name: user.name, email: user.email } }); } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno do servidor' }); } });
 app.post('/api/orders', async (req, res) => { const { userId, items } = req.body; if (!userId || !items || !Array.isArray(items) || items.length === 0) { return res.status(400).json({ error: 'Dados do pedido inválidos.' }); } const client = await pool.connect(); try { await client.query('BEGIN'); let totalPrice = 0; for (const item of items) { const productResult = await client.query('SELECT price, stock FROM products WHERE id = $1', [item.id]); const product = productResult.rows[0]; if (!product || item.quantity > product.stock) { throw new Error(`Produto ${item.id} indisponível.`); } totalPrice += product.price * item.quantity; } const orderResult = await client.query('INSERT INTO orders (user_id, total_price) VALUES ($1, $2) RETURNING id', [userId, totalPrice]); const orderId = orderResult.rows[0].id; for (const item of items) { await client.query('INSERT INTO order_items (order_id, product_id, quantity, price_per_unit) VALUES ($1, $2, $3, $4)', [orderId, item.id, item.quantity, item.price]); await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.id]); } await client.query('COMMIT'); res.status(201).json({ success: true, orderId: orderId }); } catch (err) { await client.query('ROLLBACK'); console.error('Erro ao criar o pedido:', err); res.status(500).json({ error: 'Erro ao processar o pedido.' }); } finally { client.release(); } });
 app.get('/api/orders', async (req, res) => { const userId = req.query.userId; if (!userId) { return res.status(400).json({ error: 'ID do usuário é obrigatório.' }); } try { const sql = `SELECT id, order_date, total_price FROM orders WHERE user_id = $1 ORDER BY order_date DESC`; const result = await pool.query(sql, [userId]); res.json(result.rows); } catch (err) { console.error("Erro ao buscar pedidos:", err); res.status(500).json({ error: 'Erro interno do servidor' }); } });
+// COLE ESTE BLOCO NO FINAL DAS SUAS ROTAS, ANTES DE INICIAR O SERVIDOR
 
+// ======================================================
+// --- ROTA NOVA: Buscar o Histórico de Pedidos de um Usuário ---
+// ======================================================
+app.get('/api/orders', async (req, res) => {
+    // Pegamos o ID do usuário que vem na URL (ex: /api/orders?userId=1)
+    const userId = req.query.userId;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'ID do usuário é obrigatório.' });
+    }
+
+    try {
+        // Comando SQL para buscar os dados principais dos pedidos de um usuário específico, ordenados do mais recente para o mais antigo
+        const sql = `
+            SELECT id, order_date, total_price 
+            FROM orders 
+            WHERE user_id = $1 
+            ORDER BY order_date DESC
+        `;
+        const result = await pool.query(sql, [userId]);
+        // Retorna as linhas encontradas como JSON
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erro ao buscar pedidos:", err);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
 // --- INICIAR O SERVIDOR ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
